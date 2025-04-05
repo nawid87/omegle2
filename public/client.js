@@ -1,4 +1,4 @@
-const socket = io("https://your-backend-url.onrender.com");
+const socket = io("https://omegle2-yas3.onrender.com");
 const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
 const status = document.getElementById("status");
