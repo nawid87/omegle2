@@ -1,90 +1,88 @@
 const socket = io("https://omegle2-yas3.onrender.com");
 const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
-const status = document.getElementById("status");
-const muteBtn = document.getElementById("muteBtn");
-const videoBtn = document.getElementById("videoBtn");
-const nextBtn = document.getElementById("nextBtn");
-const endBtn = document.getElementById("endBtn");
 
-let localStream, peerConnection, room;
-let isMuted = false;
-let isVideoHidden = false;
+let localStream;
+let peerConnection;
+let isAudioMuted = false;
+let isVideoOff = false;
 
 const config = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
-navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
   localStream = stream;
   localVideo.srcObject = stream;
-  socket.emit("ready");
+  socket.emit("join");
 });
 
-socket.on("matched", async (data) => {
-  room = data.room;
-  status.innerText = "Connected!";
-  createConnection();
-});
-
-socket.on("signal", async (data) => {
-  if (!peerConnection) createConnection();
-
-  if (data.type === "offer") {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit("signal", { room, data: answer });
-  } else if (data.type === "answer") {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
-  } else if (data.type === "candidate") {
-    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-  }
-});
-
-function createConnection() {
+function createPeer() {
   peerConnection = new RTCPeerConnection(config);
+  localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
 
-  peerConnection.onicecandidate = e => {
+  peerConnection.onicecandidate = (e) => {
     if (e.candidate) {
-      socket.emit("signal", { room, data: { type: "candidate", candidate: e.candidate } });
+      socket.emit("candidate", e.candidate);
     }
   };
 
-  peerConnection.ontrack = e => {
+  peerConnection.ontrack = (e) => {
     remoteVideo.srcObject = e.streams[0];
   };
-
-  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-  peerConnection.createOffer().then(offer => {
-    peerConnection.setLocalDescription(offer);
-    socket.emit("signal", { room, data: offer });
-  });
 }
 
-// Controls
-muteBtn.onclick = () => {
-  isMuted = !isMuted;
-  localStream.getAudioTracks()[0].enabled = !isMuted;
-  muteBtn.innerText = isMuted ? "🔇 Unmute" : "🎤 Mute";
-};
+socket.on("init", () => {
+  createPeer();
+  peerConnection.createOffer().then((offer) => {
+    peerConnection.setLocalDescription(offer);
+    socket.emit("offer", offer);
+  });
+});
 
-videoBtn.onclick = () => {
-  isVideoHidden = !isVideoHidden;
-  localStream.getVideoTracks()[0].enabled = !isVideoHidden;
-  videoBtn.innerText = isVideoHidden ? "🎥 Show Video" : "🎥 Hide Video";
-};
+socket.on("offer", (offer) => {
+  createPeer();
+  peerConnection.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
+    peerConnection.createAnswer().then((answer) => {
+      peerConnection.setLocalDescription(answer);
+      socket.emit("answer", answer);
+    });
+  });
+});
 
-nextBtn.onclick = () => {
+socket.on("answer", (answer) => {
+  peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on("candidate", (candidate) => {
+  peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+});
+
+socket.on("disconnectPeer", () => {
   if (peerConnection) peerConnection.close();
+  peerConnection = null;
   remoteVideo.srcObject = null;
-  socket.emit("ready"); // request new match
-  status.innerText = "Searching for new partner...";
+});
+
+// Control buttons
+document.getElementById("muteBtn").onclick = () => {
+  isAudioMuted = !isAudioMuted;
+  localStream.getAudioTracks()[0].enabled = !isAudioMuted;
 };
 
-endBtn.onclick = () => {
+document.getElementById("videoBtn").onclick = () => {
+  isVideoOff = !isVideoOff;
+  localStream.getVideoTracks()[0].enabled = !isVideoOff;
+};
+
+document.getElementById("endBtn").onclick = () => {
+  socket.disconnect();
   if (peerConnection) peerConnection.close();
+  peerConnection = null;
   remoteVideo.srcObject = null;
-  status.innerText = "Chat ended.";
+  alert("Call ended.");
+};
+
+document.getElementById("nextBtn").onclick = () => {
+  socket.emit("join"); // trigger rejoin (simple match logic)
 };
