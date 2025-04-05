@@ -1,32 +1,30 @@
 const express = require("express");
-const http = require("http");
-const socketIO = require("socket.io");
 const cors = require("cors");
+const http = require("http");
+const { Server } = require("socket.io");
 
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
-const io = socketIO(server, {
+
+const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+  },
 });
 
-const PORT = process.env.PORT || 3000;
 let waiting = null;
 
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  console.log("New user:", socket.id);
 
-  socket.on("ready", () => {
+  socket.on("join", () => {
     if (waiting) {
-      const roomID = `${socket.id}#${waiting.id}`;
-      socket.join(roomID);
-      waiting.join(roomID);
+      socket.partner = waiting;
+      waiting.partner = socket;
 
-      socket.emit("matched", { room: roomID });
-      waiting.emit("matched", { room: roomID });
+      socket.emit("init");
+      waiting.emit("init");
 
       waiting = null;
     } else {
@@ -34,16 +32,26 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("signal", ({ room, data }) => {
-    socket.to(room).emit("signal", data);
+  socket.on("offer", (data) => {
+    if (socket.partner) socket.partner.emit("offer", data);
+  });
+
+  socket.on("answer", (data) => {
+    if (socket.partner) socket.partner.emit("answer", data);
+  });
+
+  socket.on("candidate", (data) => {
+    if (socket.partner) socket.partner.emit("candidate", data);
   });
 
   socket.on("disconnect", () => {
-    if (waiting && waiting.id === socket.id) {
-      waiting = null;
-    }
-    console.log("User disconnected:", socket.id);
+    console.log("Disconnected:", socket.id);
+    if (socket.partner) socket.partner.emit("disconnectPeer");
+    if (waiting === socket) waiting = null;
   });
 });
 
-server.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
