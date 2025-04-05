@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Random Video Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="status">Waiting for partner...</div>
+  <div class="videos">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+  <div class="controls">
+    <button id="nextBtn">🔄 Next</button>
+    <button id="muteBtn">🎤 Mute</button>
+    <button id="videoBtn">🎥 Hide Video</button>
+    <button id="endBtn">❌ End</button>
+  </div>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
